@@ -117,6 +117,59 @@ export const evaluateConfiguration = query({
   },
 });
 
+// One-shot model for the CLIENT-SIDE engine: groups+options (with prices),
+// the parent's name/base price, and the rules. The browser runs the PURE
+// engine (convex/lib/configEngine) against this on every selection, so rule
+// enforcement is instant with no per-click server round trip.
+export const getConfiguratorModel = query({
+  args: { productId: v.id("products") },
+  handler: async (ctx, args) => {
+    const parent = await ctx.db.get(args.productId);
+
+    const groups = await ctx.db
+      .query("optionGroups")
+      .withIndex("by_product", (q) => q.eq("productId", args.productId))
+      .collect();
+
+    const groupsOut = [];
+    for (const group of groups) {
+      const options = await ctx.db
+        .query("options")
+        .withIndex("by_group", (q) => q.eq("groupId", group._id))
+        .collect();
+      groupsOut.push({
+        id: group._id,
+        name: group.name,
+        selectionType: group.selectionType,
+        required: group.required,
+        options: options.map((o) => ({
+          id: o._id,
+          name: o.name,
+          price: o.price ?? 0,
+        })),
+      });
+    }
+
+    const dbRules = await ctx.db
+      .query("rules")
+      .withIndex("by_product", (q) => q.eq("productId", args.productId))
+      .collect();
+    const rules = dbRules.map((r) => ({
+      type: r.type,
+      whenOptionId: r.whenOptionId,
+      thenOptionId: r.thenOptionId,
+      thenOptionIds: r.thenOptionIds,
+    }));
+
+    return {
+      name: parent?.name ?? "Product",
+      basePrice: parent?.price ?? 0,
+      groups: groupsOut,
+      rules,
+    };
+  },
+});
+
 // Resolve selected option IDs → the data needed to build HubSpot line items:
 // the option's HubSpot product ID and the parent product's name.
 export const resolveLineItems = internalQuery({

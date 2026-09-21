@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
+import { evaluate, Rule } from "../convex/lib/configEngine";
 import CustomerForm, { CustomerData } from "./CustomerForm";
 
 // A completed configuration, captured as a self-contained snapshot for the cart.
@@ -444,38 +445,75 @@ function Configurator({
 }) {
   const [selected, setSelected] = useState<Id<"options">[]>([]);
 
-  const structure = useQuery(api.configurator.getProductStructure, {
-    productId,
+  const model = useQuery(api.configurator.getConfiguratorModel, { productId });
+
+  if (!model) return <p style={{ padding: 32 }}>Loading…</p>;
+
+  const productName = model.name;
+  const structure = model.groups;
+
+  // Run the PURE constraint engine locally on every selection. Synchronous, so
+  // rules enact instantly — a conflicting option becomes disabled the moment
+  // its counterpart is chosen (no per-click server round trip, no stale window,
+  // no flicker), which is what previously let an incompatible cart slip through.
+  const allOptionIds = structure.flatMap((g) => g.options.map((o) => o.id));
+  const result = evaluate(
+    allOptionIds,
+    selected as string[],
+    model.rules as Rule[],
+  );
+
+  const priceById: Record<string, number> = {};
+  const nameById: Record<string, string> = {};
+  for (const g of structure)
+    for (const o of g.options) {
+      priceById[o.id] = o.price;
+      nameById[o.id] = o.name;
+    }
+
+  const optionsTotal = selected.reduce(
+    (sum, id) => sum + (priceById[id] ?? 0),
+    0,
+  );
+  const total = model.basePrice + optionsTotal;
+
+  const missingGroups = structure
+    .filter((g) => g.required)
+    .filter(
+      (g) => !g.options.some((o) => selected.includes(o.id as Id<"options">)),
+    )
+    .map((g) => g.name);
+
+  // Engine violation strings reference option IDs; swap in names for display.
+  const violations = result.violations.map((msg) => {
+    let out = msg;
+    for (const [id, name] of Object.entries(nameById))
+      out = out.split(id).join(name);
+    return out;
   });
-  const liveEvaluation = useQuery(api.configurator.evaluateConfiguration, {
-    productId,
-    selectedOptionIds: selected,
-  });
-  const productList = useQuery(api.products.list);
 
-  // Convex useQuery returns undefined whenever its ARGS change — and
-  // selectedOptionIds changes on every click. Gating the whole render on the
-  // live result would blank the configurator back to "Loading…" on each
-  // selection (looks like a hard refresh). So we retain the last evaluation
-  // and update it in place once the new one arrives.
-  const [evaluation, setEvaluation] =
-    useState<typeof liveEvaluation>(liveEvaluation);
-  useEffect(() => {
-    if (liveEvaluation !== undefined) setEvaluation(liveEvaluation);
-  }, [liveEvaluation]);
+  const canSubmit = missingGroups.length === 0 && violations.length === 0;
 
-  // Only the initial load blanks the screen; structure/productList don't
-  // change on selection, and evaluation is only undefined before the first result.
-  if (!structure || !productList || !evaluation)
-    return <p style={{ padding: 32 }}>Loading…</p>;
-
-  const productName =
-    productList.find((p) => p._id === productId)?.name ?? "Product";
+  const evaluation = {
+    basePrice: model.basePrice,
+    total,
+    missingGroups,
+    violations,
+    canSubmit,
+    options: structure.flatMap((g) =>
+      g.options.map((o) => ({
+        id: o.id,
+        name: o.name,
+        groupId: g.id,
+        price: o.price,
+        status: result.statuses[o.id] ?? "available",
+      })),
+    ),
+  };
 
   const statusOf = (id: string) =>
     evaluation.options.find((o) => o.id === id)?.status ?? "available";
-  const priceOf = (id: string) =>
-    evaluation.options.find((o) => o.id === id)?.price ?? 0;
+  const priceOf = (id: string) => priceById[id] ?? 0;
 
   const toggle = (id: Id<"options">) => {
     if (statusOf(id) === "disabled") return;
@@ -684,6 +722,33 @@ function Configurator({
             </p>
           )}
 
+          {evaluation.violations.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <p
+                style={{
+                  color: "#dc2626",
+                  fontSize: 14,
+                  margin: 0,
+                  fontWeight: 700,
+                }}
+              >
+                Can't combine:
+              </p>
+              <ul
+                style={{
+                  margin: "4px 0 0",
+                  paddingLeft: 18,
+                  fontSize: 13,
+                  color: "#dc2626",
+                }}
+              >
+                {evaluation.violations.map((v, i) => (
+                  <li key={i}>{v}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <button
             disabled={!evaluation.canSubmit}
             onClick={handleAdd}
@@ -700,7 +765,11 @@ function Configurator({
               color: evaluation.canSubmit ? "#fff" : "var(--muted)",
             }}
           >
-            {evaluation.canSubmit ? "Add to Cart" : "Complete configuration"}
+            {evaluation.canSubmit
+              ? "Add to Cart"
+              : evaluation.violations.length > 0
+                ? "Resolve conflicts to continue"
+                : "Complete configuration"}
           </button>
         </div>
       </div>
