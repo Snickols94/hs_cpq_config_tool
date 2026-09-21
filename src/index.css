@@ -1,0 +1,30 @@
+:root {
+  --bg: #ffffff;
+  --text: #111111;
+  --surface: #f9fafb;
+  --border: #e5e7eb;
+  --muted: #6b7280;
+  --selected: #2563eb;
+  --required-bg: #fef3c7;
+  --accent: #ff7a59; /* HubSpot orange — same in both themes */
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f0f0f;
+  --text: #f3f4f6;
+  --surface: #1c1c1e;
+  --border: #333333;
+  --muted: #9ca3af;
+  --selected: #3b82f6;
+  --required-bg: #422006;
+  --accent: #ff7a59;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
