@@ -288,3 +288,26 @@ npx convex env set FINALIZE_SHARED_SECRET "<random-string>" --prod
 Notes:
 - The `?dealId=` launch uses the root path + query string, so NO SPA rewrite / `vercel.json` is needed. If client-side routing is added later, add a Vercel SPA rewrite.
 - No secrets in git: `CONVEX_DEPLOY_KEY` lives in Vercel, `HUBSPOT_TOKEN` in Convex prod env.
+
+---
+
+## 16. Self-serve product sync (HubSpot settings page)
+
+Lets the client re-sync from HubSpot without the CLI/dashboard: edit products, flip each to `Configuration Sync Status = Sync`, open the app's settings page, click **Sync products now**.
+
+Flow (serverless bridge — no secret in the browser):
+`Settings page (React) → hubspot.serverless('trigger_product_sync') → HubSpot serverless fn → POST Convex /sync (x-sync-secret) → internal syncProducts`.
+
+**Convex** (`convex/http.ts`): an httpAction at `POST https://<deployment>.convex.site/sync` that checks the `x-sync-secret` header against `SYNC_SHARED_SECRET`, then runs `internal.hubspot.syncProducts`. Served on the `.convex.site` domain (not `.convex.cloud`).
+
+**HubSpot card project** (`cpq_ui_card`):
+- `src/app/functions/` — `triggerSync.js` (`exports.main`) reads `CONVEX_SYNC_URL` + `CONVEX_SYNC_SECRET` from app secrets and POSTs the Convex endpoint; `private-function-hsmeta.json` (`type: app-function`, `secretKeys`).
+- `src/app/settings/` — `SyncSettings.tsx` (`type: settings`, no location) with the Sync button; reuses the cards folder's React config.
+
+**Deploy / secrets:**
+1. Convex prod: `npx convex env set SYNC_SHARED_SECRET "<secret>" --prod`; push `http.ts` (a `git push` → Vercel build runs `convex deploy`, or `npx convex deploy`).
+2. Get the prod HTTP URL from the Convex dashboard (the `.convex.site` one) → the endpoint is that + `/sync`.
+3. HubSpot: `hs project install-deps` then `hs project upload`. Set the two app secrets: `CONVEX_SYNC_URL` = `https://<prod>.convex.site/sync`, `CONVEX_SYNC_SECRET` = same value as `SYNC_SHARED_SECRET` (via the app's Secrets UI or `hs secrets`).
+4. Open the app's Settings page in HubSpot → **Sync products now**.
+
+**Known unknowns to verify on first run:** the exact `hubspot.serverless()` response wrapping (the settings page shows the raw JSON if it doesn't match `{body:{...}}`, so we can adjust), and that the serverless runtime has global `fetch` (Node 18+; if it errors with "fetch is not defined", add a fetch polyfill/dep).

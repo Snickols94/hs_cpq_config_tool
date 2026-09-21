@@ -9,6 +9,7 @@
  */
 
 import type * as configurator from "../configurator.js";
+import type * as http from "../http.js";
 import type * as hubspot from "../hubspot.js";
 import type * as lib_configEngine from "../lib/configEngine.js";
 import type * as myFunctions from "../myFunctions.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   configurator: typeof configurator;
+  http: typeof http;
   hubspot: typeof hubspot;
   "lib/configEngine": typeof lib_configEngine;
   myFunctions: typeof myFunctions;
