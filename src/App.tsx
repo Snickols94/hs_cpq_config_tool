@@ -105,6 +105,16 @@ export default function App() {
     }
   };
 
+  // After a successful send, reset for the next one. In deal-first mode this
+  // returns to the picker (so more items append to the SAME deal); in create
+  // mode it returns to the customer step (the next send makes a NEW deal).
+  const startNew = () => {
+    setFinalizeResult(null);
+    setCart([]);
+    setActiveProduct(null);
+    setStep(dealId ? "picker" : "customer");
+  };
+
   const themeToggle = (
     <button
       onClick={() => setDark((d) => !d)}
@@ -135,7 +145,17 @@ export default function App() {
   };
 
   let screen;
-  if (step === "customer") {
+  if (finalizeResult?.ok) {
+    // Sent successfully: show only the deal confirmation, not a live picker
+    // you can't submit from.
+    screen = (
+      <FinalizedScreen
+        result={finalizeResult}
+        dealId={dealId}
+        onReset={startNew}
+      />
+    );
+  } else if (step === "customer") {
     screen = (
       <CustomerForm
         initial={customer ?? undefined}
@@ -179,6 +199,97 @@ export default function App() {
       {themeToggle}
       {screen}
     </>
+  );
+}
+
+// ---------- Finalized (sent) confirmation ----------
+function FinalizedScreen({
+  result,
+  dealId,
+  onReset,
+}: {
+  result: FinalizeOutcome;
+  dealId: string | null;
+  onReset: () => void;
+}) {
+  const row: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "4px 0",
+  };
+  return (
+    <div
+      style={{
+        fontFamily: "system-ui",
+        padding: 32,
+        maxWidth: 560,
+        margin: "0 auto",
+      }}
+    >
+      <h1 style={{ color: "#16a34a" }}>Sent to HubSpot ✓</h1>
+      <div
+        style={{
+          margin: "16px 0",
+          padding: 20,
+          borderRadius: 12,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          color: "var(--text)",
+        }}
+      >
+        <div style={row}>
+          <span>Deal ID</span>
+          <strong>{result.dealId}</strong>
+        </div>
+        <div style={row}>
+          <span>Line items added</span>
+          <strong>{result.lineItemsCreated}</strong>
+        </div>
+        {result.amountSet != null && (
+          <div style={row}>
+            <span>Deal amount</span>
+            <strong>${result.amountSet}</strong>
+          </div>
+        )}
+        {result.warnings.length > 0 && (
+          <ul
+            style={{
+              margin: "10px 0 0",
+              paddingLeft: 18,
+              fontSize: 13,
+              color: "#b45309",
+            }}
+          >
+            {result.warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {dealId ? (
+        <p style={{ color: "var(--muted)", fontSize: 14 }}>
+          You can close this tab and return to the deal in HubSpot.
+        </p>
+      ) : null}
+
+      <button
+        onClick={onReset}
+        style={{
+          marginTop: 8,
+          padding: "12px 24px",
+          borderRadius: 8,
+          border: "1px solid var(--border)",
+          background: "var(--surface)",
+          color: "var(--text)",
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        {dealId ? "Add more to this deal" : "Configure another"}
+      </button>
+    </div>
   );
 }
 
