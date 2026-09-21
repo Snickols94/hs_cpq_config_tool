@@ -330,7 +330,7 @@ function ProductPicker({
       style={{
         fontFamily: "system-ui",
         padding: 32,
-        maxWidth: 700,
+        maxWidth: 1100,
         margin: "0 auto",
       }}
     >
@@ -368,178 +368,193 @@ function ProductPicker({
 
       <h1>Choose a Product to Configure</h1>
 
-      {cart.length > 0 && (
-        <div
-          style={{
-            margin: "16px 0",
-            padding: 16,
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <strong>Cart ({cart.length})</strong>
-          <div
-            style={{
-              margin: "8px 0",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            {cart.map((c) => {
-              const isDuplicated = productCounts[c.productId] > 1;
-              return (
-                <div
-                  key={c.tag}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <span>
-                    {c.productName}
-                    {isDuplicated ? ` (${c.tag})` : ""} — ${c.total}
-                  </span>
-                  <button
-                    onClick={() => onRemove(c.tag)}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                      border: "1px solid var(--border)",
-                      background: "var(--bg)",
-                      color: "var(--text)",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ fontWeight: 700, marginTop: 8 }}>
-            Cart total: ${cartTotal}
-          </div>
-        </div>
-      )}
-
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          marginTop: 16,
+          gap: 32,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
         }}
       >
-        {products.map((p) => (
-          <button
-            key={p._id}
-            onClick={() => onPick(p._id)}
-            style={{
-              padding: "14px 20px",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              color: "var(--text)",
-              textAlign: "left",
-              fontSize: 16,
-              cursor: "pointer",
-            }}
-          >
-            {p.name}
-          </button>
-        ))}
-      </div>
-
-      {cart.length > 0 && (
-        <>
-          <button
-            onClick={onFinalize}
-            disabled={finalizing || finalizeResult?.ok === true}
-            style={{
-              marginTop: 24,
-              padding: "14px 28px",
-              borderRadius: 8,
-              border: "none",
-              fontSize: 16,
-              fontWeight: 700,
-              cursor:
-                finalizing || finalizeResult?.ok ? "not-allowed" : "pointer",
-              background:
-                finalizing || finalizeResult?.ok
-                  ? "var(--border)"
-                  : "#FF7A59",
-              color:
-                finalizing || finalizeResult?.ok ? "var(--muted)" : "#fff",
-            }}
-          >
-            {finalizing
-              ? "Sending to HubSpot…"
-              : finalizeResult?.ok
-                ? "Sent ✓"
-                : dealId
-                  ? "Add to Deal & Recalculate Total"
-                  : "Finalize Cart & Send to HubSpot"}
-          </button>
-
-          {finalizeResult && (
-            <div
+        {/* Left: product list — the center stays for choosing/configuring. */}
+        <div
+          style={{
+            flex: "1 1 400px",
+            minWidth: 300,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {products.map((prod) => (
+            <button
+              key={prod._id}
+              onClick={() => onPick(prod._id)}
               style={{
-                marginTop: 16,
-                padding: 16,
-                borderRadius: 10,
+                padding: "14px 20px",
+                borderRadius: 8,
                 border: "1px solid var(--border)",
                 background: "var(--surface)",
                 color: "var(--text)",
+                textAlign: "left",
+                fontSize: 16,
+                cursor: "pointer",
               }}
             >
-              {finalizeResult.ok ? (
-                <div>
-                  <strong style={{ color: "#16a34a" }}>
-                    {dealId ? "Added to deal in HubSpot" : "Deal created in HubSpot"}
-                  </strong>
-                  <div style={{ marginTop: 6, fontSize: 14 }}>
-                    Deal ID: {finalizeResult.dealId} · Line items:{" "}
-                    {finalizeResult.lineItemsCreated}
-                    {finalizeResult.amountSet != null
-                      ? ` · Amount: $${finalizeResult.amountSet}`
-                      : ""}
-                  </div>
-                </div>
-              ) : (
-                <div>
+              {prod.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Right: cart — mirrors the configurator's running-cost panel. */}
+        <div
+          style={{
+            flex: "0 0 320px",
+            position: "sticky",
+            top: 32,
+            padding: 20,
+            borderRadius: 12,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Cart ({cart.length})</h3>
+
+          {cart.length === 0 ? (
+            <p style={{ color: "var(--muted)" }}>
+              No configurations added yet.
+            </p>
+          ) : (
+            <>
+              <div
+                style={{
+                  margin: "8px 0",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {cart.map((c) => {
+                  const isDuplicated = productCounts[c.productId] > 1;
+                  return (
+                    <div
+                      key={c.tag}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span>
+                        {c.productName}
+                        {isDuplicated ? ` (${c.tag})` : ""} — ${c.total}
+                      </span>
+                      <button
+                        onClick={() => onRemove(c.tag)}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          border: "1px solid var(--border)",
+                          background: "var(--bg)",
+                          color: "var(--text)",
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 20,
+                  fontWeight: 700,
+                }}
+              >
+                <span>Total</span>
+                <span>${cartTotal}</span>
+              </div>
+
+              <button
+                onClick={onFinalize}
+                disabled={finalizing || finalizeResult?.ok === true}
+                style={{
+                  marginTop: 16,
+                  width: "100%",
+                  padding: "14px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor:
+                    finalizing || finalizeResult?.ok
+                      ? "not-allowed"
+                      : "pointer",
+                  background:
+                    finalizing || finalizeResult?.ok
+                      ? "var(--border)"
+                      : "#FF7A59",
+                  color:
+                    finalizing || finalizeResult?.ok ? "var(--muted)" : "#fff",
+                }}
+              >
+                {finalizing
+                  ? "Sending to HubSpot…"
+                  : finalizeResult?.ok
+                    ? "Sent ✓"
+                    : dealId
+                      ? "Add to Deal & Recalculate"
+                      : "Finalize & Send to HubSpot"}
+              </button>
+
+              {finalizeResult && !finalizeResult.ok && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 12,
+                    borderRadius: 10,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg)",
+                    color: "var(--text)",
+                  }}
+                >
                   <strong style={{ color: "#dc2626" }}>Finalize failed</strong>
-                  <div style={{ marginTop: 6, fontSize: 14 }}>
+                  <div style={{ marginTop: 6, fontSize: 13 }}>
                     {finalizeResult.error}
                     {finalizeResult.dealId
                       ? ` (a deal was created: ${finalizeResult.dealId} — review it in HubSpot)`
                       : ""}
                   </div>
+                  {finalizeResult.warnings.length > 0 && (
+                    <ul
+                      style={{
+                        margin: "10px 0 0",
+                        paddingLeft: 18,
+                        fontSize: 13,
+                        color: "#b45309",
+                      }}
+                    >
+                      {finalizeResult.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
-
-              {finalizeResult.warnings.length > 0 && (
-                <ul
-                  style={{
-                    margin: "10px 0 0",
-                    paddingLeft: 18,
-                    fontSize: 13,
-                    color: "#b45309",
-                  }}
-                >
-                  {finalizeResult.warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
