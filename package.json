@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "convex dev",
+    "build": "vite build",
+    "preview": "vite preview",
     "predev": "convex dev --until-success && convex dashboard",
     "logs": "convex logs",
     "typecheck": "tsc -p convex && tsc -p src",

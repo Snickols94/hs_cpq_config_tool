@@ -230,3 +230,61 @@ Two ways to run the tool:
 **HubSpot setup (one-time):** add a way to launch the configurator from a deal with the record ID in the URL — a **CRM card (iframe)** or a **custom action / link** that opens `https://<configurator-host>/?dealId={{deal.hs_object_id}}`. That's the only HubSpot-side work; the code handles the rest.
 
 **Merge-after (rejected):** HubSpot deal merge is lossy/manual and pollutes the pipeline with duplicates until cleaned — kept only as a manual fallback for accidental dupes, never the designed flow.
+
+---
+
+## 14. Security posture (function lockdown)
+
+**Public Convex surface is now minimal** — only what the browser legitimately needs:
+
+- Read queries: `configurator.getProductStructure`, `configurator.evaluateConfiguration`, `products.list`, `products.listConfigurable`.
+- One write entry point: `hubspot.finalizeCart`.
+
+**Everything else is `internal*`** (not callable from the client, still runnable from the Convex dashboard for manual sync/testing): `syncProducts`, `applySync`, `findOrCreateCompany`, `findOrCreateContact`, `createDeal`, `addLineItemsToDeal`, `debugPipelines`, `configurator.resolveLineItems`, `configurator.resolveParentProduct`, `products.add`, `seed.*`. `finalizeCart` calls them via `internal.*` refs.
+
+Why it matters: a hosted front-end ships the Convex URL in its JS bundle, so any public function is world-callable. Before the lockdown, a stranger could create HubSpot deals/contacts, run a sync, or rewrite prices. Now the only reachable write is `finalizeCart`.
+
+**`finalizeCart` speed-bump gate:** set `FINALIZE_SHARED_SECRET` on the Convex deployment and `VITE_FINALIZE_SECRET` in the front-end build; `finalizeCart` then rejects calls whose `authToken` doesn't match. Off when the secret is unset (dev). This is a speed-bump, NOT real auth — the token ships in the client bundle.
+
+**Before hosting to production, gate `finalizeCart` properly** (pick one):
+
+1. **Convex Auth** — require a signed-in user; check `ctx.auth` at the top of `finalizeCart`.
+2. **HubSpot-signed launch token** — the card's serverless function mints a short-lived token bound to the deal; `finalizeCart` verifies it. This also fixes the fact that `dealId` is currently trusted, unvalidated input (anyone could append to any deal).
+
+**Version control:**
+- `cpq-configurator` → pushed to `https://github.com/Snickols94/hs_cpq_config_tool` (branch `main`).
+- `cpq_ui_card` → git repo with an initial commit, NOT yet pushed (needs its own empty private repo, then `git branch -M main && git remote add origin <url> && git push -u origin main`).
+- NOTE: run git in a native shell (PowerShell), not through the device bridge — the bridge can't delete files, which leaves stale `.git/*.lock` files. If a `branch`/`push` says a lock file exists, delete `.git/HEAD.lock` (and any `*.lock` under `.git`) and retry.
+
+---
+
+## 15. Hosting (Vercel front-end + Convex production)
+
+Front-end → Vercel; backend → a Convex **production** deployment (separate from the dev deployment `fine-greyhound-640`, which stays for local work). Do git in PowerShell, not the bridge.
+
+**1. Build script** (added): `"build": "vite build"` in package.json.
+
+**2. Convex prod env** — env vars are PER deployment, so the dev token does NOT carry to prod. Set them on prod:
+```
+npx convex env set HUBSPOT_TOKEN "<token>" --prod
+npx convex env set HUBSPOT_DEAL_PIPELINE "default" --prod
+npx convex env set HUBSPOT_DEAL_STAGE "qualifiedtobuy" --prod
+# optional finalize gate:
+npx convex env set FINALIZE_SHARED_SECRET "<random-string>" --prod
+```
+
+**3. Vercel project**
+- Import the GitHub repo (`hs_cpq_config_tool`). Framework preset: **Vite**, output dir `dist` (auto-detected).
+- **Build Command:** `npx convex deploy --cmd 'npm run build'` (deploys the prod backend AND builds the front-end with the prod Convex URL injected). If the build doesn't pick up the URL, be explicit: `npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'npm run build'`.
+- Env var **`CONVEX_DEPLOY_KEY`** (Production only): Convex dashboard → prod deployment → Settings → *Generate Production Deploy Key* (needs `deployment:deploy`). This is a SECRET — Vercel env only, never the repo.
+- Optional gate: add **`VITE_FINALIZE_SECRET`** = the same value as `FINALIZE_SHARED_SECRET`.
+- Deploy → Vercel gives a URL like `https://<project>.vercel.app`.
+
+**4. Point the HubSpot card at the hosted URL**
+- In `cpq_ui_card/src/app/cards/NewCard.tsx`, set `CONFIGURATOR_BASE_URL` to the Vercel URL, then `hs project upload`.
+
+**5. Verify:** open a deal → card → Configure products → hosted app loads and appends to the deal.
+
+Notes:
+- The `?dealId=` launch uses the root path + query string, so NO SPA rewrite / `vercel.json` is needed. If client-side routing is added later, add a Vercel SPA rewrite.
+- No secrets in git: `CONVEX_DEPLOY_KEY` lives in Vercel, `HUBSPOT_TOKEN` in Convex prod env.
